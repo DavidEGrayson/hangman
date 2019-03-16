@@ -50,7 +50,7 @@ class Hangman
     while(pattern =~ /_/) do
       @words = filter_words(@words, pattern, used_letters)
 
-      puts "#{pattern} (used: #{used_letters.sort.join})"
+      puts "#{pattern} (used: #{used_letters.join})"
       #puts "words: #{@words.size}"
 
       unused_letters = Letters - used_letters
@@ -76,13 +76,37 @@ class Hangman
   end
 
   def make_guess(words, pattern, used_letters)
-    make_guess_core(words, pattern, used_letters)[0]
+    # greg_guess(words, used_letters)
+
+    make_guess_core(words, pattern, used_letters, 99)[0]
+  end
+
+  def greg_guess(words, used_letters)
+    letter_freq = {}
+    words.each do |word|
+      word.each_char do |letter|
+        letter_freq[letter] ||= 0
+        letter_freq[letter] += 1
+      end
+    end
+
+    used_letters.each do |letter|
+      letter_freq.delete(letter)
+    end
+
+    p letter_freq
+
+    letter_freq.max_by { |k, v| v }.first
   end
 
   # Returns the guess we should make, and the number of
-  # incorrect guesses remaining before victory.
-  def make_guess_core(words, pattern, used_letters)
+  # incorrect guesses before victory (including the returned one).
+  # Returns nil if we cannot find any guesses with *fewer* incorrect guesses
+  # than the budget.
+  def make_guess_core(words, pattern, used_letters, incorrect_guess_budget)
     unused_letters = Letters - used_letters
+
+    # TODO: make incorrect_guess_budget works
 
     guesses = {}
     unused_letters.each do |guess|
@@ -106,21 +130,31 @@ class Hangman
         end
       end
 
+      next if incorrect_guess_count > incorrect_guess_budget
+
       if opponent_choice.include?('_')
-        r = make_guess_core(remaining_words, opponent_choice, used_letters + [guess])
+        r = make_guess_core(remaining_words,
+          opponent_choice,
+          used_letters + [guess],
+          incorrect_guess_budget - incorrect_guess_count)
+        next if !r
         incorrect_guess_count += r[1]
       end
 
       guesses[guess] = incorrect_guess_count
 
-      puts "-#{used_letters.join} #{guess} => #{incorrect_guess_count}"
+      puts "-#{pattern} #{used_letters.join} #{guess} => #{incorrect_guess_count}"
 
       if incorrect_guess_count == 0
         # Can't do better than this guess.
         break
       end
+
+      if incorrect_guess_count <= incorrect_guess_budget
+        incorrect_guess_budget = incorrect_guess_count - 1
+      end
     end
 
-    guesses.min_by { |k, v| v } or raise "All guesses are bad #{pattern} #{used_letters.join}"
+    guesses.min_by { |k, v| v }
   end
 end

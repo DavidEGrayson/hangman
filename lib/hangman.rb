@@ -46,6 +46,7 @@ class Hangman
       @words = filter_words(@words, pattern, used_letters)
 
       puts "#{pattern} (used: #{used_letters.sort.join})"
+      #puts "words: #{@words.size}"
 
       unused_letters = Letters - used_letters
 
@@ -72,8 +73,13 @@ class Hangman
   def make_guess(words, pattern, used_letters)
     unused_letters = Letters - used_letters
 
-    unused_letters.min_by do |guess|
-      get_options(words, pattern, guess).max_by { |k, v| v }.last
+    guesses = {}
+    unused_letters.each do |guess|
+      options = get_options(words, pattern, guess)
+      opponent_option = best_option(options)
+      guesses[guess] = options[opponent_option]
     end
+
+    guesses.min_by { |k, v| v }.first
   end
 end

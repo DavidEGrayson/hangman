@@ -1,4 +1,6 @@
 class Hangman
+  Letters = ('a'..'z').to_a
+
   def filter_words(words, pattern, used_letters)
     char_class = if used_letters.empty?
                    '.'
@@ -29,7 +31,7 @@ class Hangman
   end
 
   def load_words
-    words = File.open('/usr/share/dict/words').map(&:strip).grep %r(^[a-z]+$)
+    File.open('/usr/share/dict/words').map(&:strip).grep %r(^[a-z]+$)
   end
 
   def initialize
@@ -45,10 +47,18 @@ class Hangman
 
       puts "#{pattern} (used: #{used_letters.sort.join})"
 
-      guess = ''
-      until guess =~ /^[a-z]$/ && !used_letters.include?(guess)
+      unused_letters = Letters - used_letters
+
+      while true
         print 'Your guess? '
         guess = gets.strip
+
+        if guess == ''
+          guess = make_guess(@words, pattern, used_letters)
+          puts "Guessed #{guess}"
+        end
+
+        break if unused_letters.include?(guess)
       end
 
       used_letters << guess
@@ -57,5 +67,13 @@ class Hangman
     end
 
     puts "#{pattern} - you got it!"
+  end
+
+  def make_guess(words, pattern, used_letters)
+    unused_letters = Letters - used_letters
+
+    unused_letters.min_by do |guess|
+      get_options(words, pattern, guess).max_by { |k, v| v }.last
+    end
   end
 end

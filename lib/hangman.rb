@@ -47,6 +47,26 @@ def generate_pattern(word, pattern, guess)
   pattern
 end
 
+def possible_responses(state, guess)
+  new_used_letters = state.used_letters + [guess]
+
+  options = {}
+  state.words.each do |word|
+    pattern = generate_pattern(word, state.pattern, guess)
+    options[pattern] ||= []
+    options[pattern] << word
+  end
+
+  options.map do |pattern, words|
+    new_state = HangmanState.new
+    new_state.words = words
+    new_state.pattern = pattern
+    new_state.used_letters = new_used_letters
+    new_state
+  end
+end
+
+
 def prompt_for_guess(state)
   while true
     print 'Your guess? '
@@ -65,7 +85,6 @@ def interactive_game
   state = initial_state(8)
   until state.done?
     puts "#{state.pattern} (used: #{state.used_letters.join})"
-    puts "words: #{state.words.size}"
     guess = prompt_for_guess(state)
     state = choose_response(state, guess)
   end
@@ -73,21 +92,8 @@ def interactive_game
 end
 
 def choose_response(state, guess)
-  new_state = HangmanState.new
-  new_state.used_letters = state.used_letters + [guess]
-
-  options = {}
-  state.words.each do |word|
-    pattern = generate_pattern(word, state.pattern, guess)
-    options[pattern] ||= []
-    options[pattern] << word
-  end
-
-  pattern, words = options.max_by { |pattern, words| words.size }
-  new_state.words = words
-  new_state.pattern = pattern
-
-  new_state
+  responses = possible_responses(state, guess)
+  responses.max_by { |s| s.words.size }
 end
 
 def choose_guess(state)

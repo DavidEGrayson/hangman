@@ -66,19 +66,26 @@ def possible_responses(state, guess)
   end
 end
 
-
 def prompt_for_guess(state)
-  while true
+  $guess_buffer ||= []
+  while $guess_buffer.empty?
     print 'Your guess? '
-    guess = gets.strip
+    input = gets.strip
 
-    if guess == ''
+    if input == ''
       guess = choose_guess(state)
       puts "Guessed #{guess}"
+      guesses = [guess]
+    else
+      guesses = input.split('')
     end
 
-    return guess if state.unused_letters.include?(guess)
+    next if guesses.uniq != guesses
+    next if guesses - state.used_letters != guesses
+
+    $guess_buffer = guesses
   end
+  return $guess_buffer.shift
 end
 
 def interactive_game

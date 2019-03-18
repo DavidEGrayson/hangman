@@ -1,162 +1,147 @@
-class Hangman
-  Letters = ('a'..'z').to_a
+Letters = ('a'..'z').to_a
+Dictionary = File.open('/usr/share/dict/words').map(&:strip).grep %r(^[a-z]+$)
 
-  def filter_words(words, pattern, used_letters)
-    char_class = if used_letters.empty?
-                   '.'
-                 else
-                   '[^'+used_letters.join+']'
-                 end
-    regexp = Regexp.new('^'+pattern.gsub('_',char_class)+'$')
-    words.grep regexp
+class HangmanState
+  attr_accessor :words, :pattern, :used_letters
+
+  def done?
+    !pattern.include?('_')
   end
 
-  def generate_pattern(word, pattern, guess)
-    p = pattern.dup
-    word.length.times do |i|
-      if word[i] == guess
-        p[i] = guess
-      end
+  def unused_letters
+    Letters - used_letters
+  end
+end
+
+def filter_words(words, pattern, used_letters)
+  char_class = if used_letters.empty?
+                 '.'
+               else
+                 '[^'+used_letters.join+']'
+               end
+  regexp = Regexp.new('^' + pattern.gsub('_', char_class) + '$')
+  words.grep regexp
+end
+
+def make_state(pattern, used_letters)
+  state = HangmanState.new
+  state.words = filter_words(Dictionary, pattern, used_letters)
+  state.pattern = pattern
+  state.used_letters = used_letters
+  state
+end
+
+def initial_state(word_size)
+  used_letters = []
+  pattern = '_' * word_size
+  make_state(pattern, used_letters)
+end
+
+def generate_pattern(word, pattern, guess)
+  pattern = pattern.dup
+  word.length.times do |i|
+    if word[i] == guess
+      pattern[i] = guess
     end
-    p
   end
+  pattern
+end
 
-  def get_options(words, pattern, guess)
-    options = {}
-    words.each do |word|
-      p = generate_pattern(word, pattern, guess)
-      options[p] ||= 0
-      options[p] += 1
-    end
-    options
-  end
+def prompt_for_guess(state)
+  while true
+    print 'Your guess? '
+    guess = gets.strip
 
-  def best_option(options)
-    options.max_by { |pattern, word_count| word_count }[0]
-  end
-
-  def load_words
-    File.open('/usr/share/dict/words').map(&:strip).grep %r(^[a-z]+$)
-  end
-
-  def initialize
-    @words = load_words
-    nil
-  end
-
-  def game
-    pattern = '________'
-    used_letters = []
-    while(pattern =~ /_/) do
-      @words = filter_words(@words, pattern, used_letters)
-
-      puts "#{pattern} (used: #{used_letters.join})"
-      #puts "words: #{@words.size}"
-
-      unused_letters = Letters - used_letters
-
-      while true
-        print 'Your guess? '
-        guess = gets.strip
-
-        if guess == ''
-          guess = make_guess(@words, pattern, used_letters)
-          puts "Guessed #{guess}"
-        end
-
-        break if unused_letters.include?(guess)
-      end
-
-      used_letters << guess
-      options = get_options(@words, pattern, guess)
-      pattern = best_option(options)
+    if guess == ''
+      guess = choose_guess(state)
+      puts "Guessed #{guess}"
     end
 
-    puts "#{pattern} - you got it!"
+    return guess if state.unused_letters.include?(guess)
+  end
+end
+
+def interactive_game
+  state = initial_state(8)
+  until state.done?
+    puts "#{state.pattern} (used: #{state.used_letters.join})"
+    puts "words: #{state.words.size}"
+    guess = prompt_for_guess(state)
+    state = choose_response(state, guess)
+  end
+  puts "#{state.pattern} - you got it!"
+end
+
+def choose_response(state, guess)
+  new_state = HangmanState.new
+  new_state.used_letters = state.used_letters + [guess]
+
+  options = {}
+  state.words.each do |word|
+    pattern = generate_pattern(word, state.pattern, guess)
+    options[pattern] ||= []
+    options[pattern] << word
   end
 
-  def make_guess(words, pattern, used_letters)
-    # greg_guess(words, used_letters)
+  pattern, words = options.max_by { |pattern, words| words.size }
+  new_state.words = words
+  new_state.pattern = pattern
 
-    make_guess_core(words, pattern, used_letters, 99)[0]
-  end
+  new_state
+end
 
-  def greg_guess(words, used_letters)
-    letter_freq = {}
-    words.each do |word|
-      word.each_char do |letter|
-        letter_freq[letter] ||= 0
-        letter_freq[letter] += 1
+def choose_guess(state)
+  choose_guess_core(state, 99)[0]
+end
+
+# Returns the guess we should make, and the number of
+# incorrect guesses before victory (including the returned one).
+# Returns nil if we cannot find any guesses with *fewer* incorrect guesses
+# than the budget.
+def choose_guess_core(state, incorrect_guess_budget)
+  best_guess = nil
+  best_incorrect_guess_count = nil
+
+  state.unused_letters.each do |guess|
+    incorrect_guess_count = 0
+
+    new_state = choose_response(state, guess)
+
+    if new_state.pattern == state.pattern
+      incorrect_guess_count += 1
+
+      if new_state.words.size == state.words.size
+        # This guess has no value.
+        next
       end
     end
 
-    used_letters.each do |letter|
-      letter_freq.delete(letter)
+    next if incorrect_guess_count > incorrect_guess_budget
+
+    if new_state.done?
+      puts "!#{new_state.pattern} #{new_state.used_letters.join}"
+    else
+      new_budget = incorrect_guess_budget - incorrect_guess_count
+      r = choose_guess_core(new_state, new_budget)
+      next if !r
+      incorrect_guess_count += r[1]
     end
 
-    p letter_freq
+    next if incorrect_guess_count > incorrect_guess_budget
 
-    letter_freq.max_by { |k, v| v }.first
-  end
+    best_guess = guess
+    best_incorrect_guess_count = incorrect_guess_count
 
-  # Returns the guess we should make, and the number of
-  # incorrect guesses before victory (including the returned one).
-  # Returns nil if we cannot find any guesses with *fewer* incorrect guesses
-  # than the budget.
-  def make_guess_core(words, pattern, used_letters, incorrect_guess_budget)
-    unused_letters = Letters.reverse - used_letters
+    puts "-#{state.pattern} #{state.used_letters.join} #{guess} => " \
+      "#{incorrect_guess_count}"
 
-    best_guess = nil
-    best_incorrect_guess_count = nil
-
-    unused_letters.each do |guess|
-      incorrect_guess_count = 0
-
-      options = {}
-      words.each do |word|
-        p = generate_pattern(word, pattern, guess)
-        options[p] ||= []
-        options[p] << word
-      end
-      opponent_choice, remaining_words = options.max_by { |k, v| v.size }
-
-      if opponent_choice == pattern
-        incorrect_guess_count += 1
-
-        if remaining_words.size == words.size
-          # This guess has no value.
-          next
-        end
-      end
-
-      next if incorrect_guess_count > incorrect_guess_budget
-
-      if opponent_choice.include?('_')
-        r = make_guess_core(remaining_words,
-          opponent_choice,
-          used_letters + [guess],
-          incorrect_guess_budget - incorrect_guess_count)
-        next if !r
-        incorrect_guess_count += r[1]
-      else
-        puts "!#{opponent_choice} #{used_letters.join}#{guess}"
-      end
-
-      next if incorrect_guess_count > incorrect_guess_budget
-
-      best_guess = guess
-      best_incorrect_guess_count = incorrect_guess_count
-
-      puts "-#{pattern} #{used_letters.join} #{guess} => #{incorrect_guess_count}"
-
-      if best_incorrect_guess_count == 0
-        # Can't do better than this guess.
-        break
-      end
-
-      incorrect_guess_budget = incorrect_guess_count - 1
+    if best_incorrect_guess_count == 0
+      # Can't do better than this guess.
+      break
     end
 
-    [best_guess, best_incorrect_guess_count] if best_guess
+    incorrect_guess_budget = incorrect_guess_count - 1
   end
+
+  [best_guess, best_incorrect_guess_count] if best_guess
 end

@@ -104,11 +104,11 @@ class Hangman
   # Returns nil if we cannot find any guesses with *fewer* incorrect guesses
   # than the budget.
   def make_guess_core(words, pattern, used_letters, incorrect_guess_budget)
-    unused_letters = Letters - used_letters
+    unused_letters = Letters.reverse - used_letters
 
-    # TODO: make incorrect_guess_budget works
+    best_guess = nil
+    best_incorrect_guess_count = nil
 
-    guesses = {}
     unused_letters.each do |guess|
       incorrect_guess_count = 0
 
@@ -125,7 +125,6 @@ class Hangman
 
         if remaining_words.size == words.size
           # This guess has no value.
-          #puts "Bad guess: #{pattern} #{guess} #{words.size}"
           next
         end
       end
@@ -139,22 +138,25 @@ class Hangman
           incorrect_guess_budget - incorrect_guess_count)
         next if !r
         incorrect_guess_count += r[1]
+      else
+        puts "!#{opponent_choice} #{used_letters.join}#{guess}"
       end
 
-      guesses[guess] = incorrect_guess_count
+      next if incorrect_guess_count > incorrect_guess_budget
+
+      best_guess = guess
+      best_incorrect_guess_count = incorrect_guess_count
 
       puts "-#{pattern} #{used_letters.join} #{guess} => #{incorrect_guess_count}"
 
-      if incorrect_guess_count == 0
+      if best_incorrect_guess_count == 0
         # Can't do better than this guess.
         break
       end
 
-      if incorrect_guess_count <= incorrect_guess_budget
-        incorrect_guess_budget = incorrect_guess_count - 1
-      end
+      incorrect_guess_budget = incorrect_guess_count - 1
     end
 
-    guesses.min_by { |k, v| v }
+    [best_guess, best_incorrect_guess_count] if best_guess
   end
 end
